@@ -1,0 +1,25 @@
+{
+  "name": "discord-undercover-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for playing the Undercover party game",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "undercover",
+    "game"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1"
+  }
+}
