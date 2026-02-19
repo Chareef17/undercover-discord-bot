@@ -24,7 +24,7 @@ cp .env.example .env
    - สร้าง Application
    - ไปที่ Bot > Reset Token และคัดลอก Token
    - เปิด **Message Content Intent** และ **Server Members Intent**
-   - เชิญบอทเข้าเซิร์ฟเวอร์ด้วย OAuth2 URL (Scope: bot, Permissions: Send Messages, Read Message History, Manage Messages)
+   - เชิญบอทเข้าเซิร์ฟเวอร์ด้วย OAuth2 (Scope: **bot** และ **applications.commands**)
 
 3. ใส่ Token ในไฟล์ `.env`:
 ```
@@ -39,18 +39,18 @@ npm start
 
 ## คำสั่ง
 
-ใช้ `!u` หรือ `!uc` แล้วตามด้วยคำสั่ง (ตัวย่อในวงเล็บ):
+พิมพ์ `/uc` แล้วเลือกคำสั่ง (Slash Commands):
 
-| คำสั่ง | ตัวย่อ | คำอธิบาย |
-|--------|--------|----------|
-| `!u help` | - | แสดงวิธีเล่น |
-| `!u create` | `!u c` | สร้างห้องเกม |
-| `!u join` | `!u j` | เข้าร่วมเกม |
-| `!u leave` | `!u l` | ออกจากห้อง |
-| `!u start` | `!u s` | เริ่มเกม (Host) |
-| `!u word` | `!u w` | ดูคำของตัวเอง |
-| `!u next` | `!u n` | ไปขั้นตอนโหวต (Host) |
-| `!u end` | `!u e` | จบเกม (Host) |
+| คำสั่ง | คำอธิบาย |
+|--------|----------|
+| `/uc create` | สร้างห้องเกม (คุณเป็น Host) |
+| `/uc join` | เข้าร่วมเกม |
+| `/uc leave` | ออกจากห้อง |
+| `/uc start` | เริ่มเกม (Host) |
+| `/uc word` | ดูคำของตัวเอง |
+| `/uc vote` | เริ่มช่วงโหวต (Host) |
+| `/uc end` | จบเกม (Host) |
+| `/uc help` | แสดงวิธีเล่น |
 
 ## กติกาเกม
 
@@ -60,7 +60,7 @@ npm start
 
 แต่ละรอบ:
 1. ทุกคนบอก **คำอธิบาย 1 คำ** เกี่ยวกับคำของตัวเอง
-2. Host พิมพ์ `!uc next` เพื่อเปิดโหวต
+2. Host uses `/uc vote` when everyone has described
 3. โหวตคนที่คิดว่าเป็น Undercover
 4. คนที่ได้โหวตมากที่สุดถูก淘汰
 5. Civilian ชนะเมื่อ淘汰 Undercover ได้หมด | Undercover ชนะเมื่อเหลือคนน้อยกว่าเท่ากับ Undercover
@@ -74,6 +74,7 @@ discord-undercover-bot/
 ├── words.js          # คำคู่สำหรับเกม
 ├── game/
 │   └── UndercoverGame.js  # Logic เกม
+├── commands.js      # Slash Commands
 ├── package.json
 └── README.md
 ```
@@ -81,4 +82,3 @@ discord-undercover-bot/
 ## เพิ่มคำใหม่
 
 แก้ไข `words.js` — แต่ละแถวคือ `[คำ Civilian, คำ Undercover]`
-# undercover-discord-bot

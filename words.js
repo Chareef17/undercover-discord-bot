@@ -1,5 +1,5 @@
-// คำคู่สำหรับเกม Undercover - [คำปกติ, คำ Undercover]
-// คนส่วนใหญ่ได้คำปกติ, คน Undercover ได้คำที่ใกล้เคียง
+// Word pairs for Undercover - [civilian word, undercover word]
+// Civilians get the first word, Undercover gets the second
 module.exports = [
   ['แอปเปิล', 'ส้ม'],
   ['สุนัข', 'แมว'],

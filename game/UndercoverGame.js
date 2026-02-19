@@ -51,7 +51,7 @@ class UndercoverGame {
   }
 
   start() {
-    if (!this.canStart()) return { success: false, message: 'ผู้เล่นไม่เพียงพอ (ต้องมีอย่างน้อย ' + this.minPlayers + ' คน)' };
+    if (!this.canStart()) return { success: false, message: 'Not enough players (need at least ' + this.minPlayers + ')' };
 
     const playerList = [...this.players.values()];
     const pair = words[Math.floor(Math.random() * words.length)];
