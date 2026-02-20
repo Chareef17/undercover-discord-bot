@@ -116,6 +116,8 @@ async function runCommand(interaction) {
     const result = game.start();
     if (!result.success) return interaction.reply({ content: result.message, ephemeral: true });
 
+    await interaction.deferReply();
+
     const embed = new EmbedBuilder()
       .setColor(0xFEE75C)
       .setTitle('🎭 Game started!')
@@ -131,11 +133,11 @@ async function runCommand(interaction) {
         const u = await client.users.fetch(userId);
         let msg = '';
         if (player.role === ROLES.MR_WHITE) {
-          msg = '🃏 You are **Mr. White**!\nYou have no word — pretend you know it';
+          msg = 'You have no word — pretend you know it';
         } else if (player.role === ROLES.UNDERCOVER) {
-          msg = `🔴 Your word: **${player.word}**\n(You are the Undercover!)`;
+          msg = `Your word: **${player.word}**`;
         } else {
-          msg = `🟢 Your word: **${player.word}**`;
+          msg = `Your word: **${player.word}**`;
         }
         await u.send(msg);
       } catch (e) {
@@ -143,7 +145,7 @@ async function runCommand(interaction) {
       }
     }
 
-    return interaction.reply({ embeds: [embed] });
+    return interaction.editReply({ embeds: [embed] });
   }
 
   if (sub === 'word') {
@@ -155,7 +157,7 @@ async function runCommand(interaction) {
     try {
       const u = await client.users.fetch(user.id);
       const msg = player.role === ROLES.MR_WHITE
-        ? '🃏 You are **Mr. White** — you have no word'
+        ? 'You have no word — pretend you know it'
         : `Your word: **${player.word}**`;
       await u.send(msg);
       return interaction.reply({ content: '✅ Sent your word via DM', ephemeral: true });
@@ -266,16 +268,16 @@ client.on('interactionCreate', async (interaction) => {
 
     if (check.civiliansWin) {
       embed.addFields({ name: '🏆 Result', value: '**Civilians win!**', inline: false });
-      game.endGame();
-      activeGames.delete(interaction.channel.id);
+      embed.addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
+      game.resetToWaiting();
     } else if (check.undercoverWin) {
       embed.addFields({ name: '🏆 Result', value: '**Undercover wins!**', inline: false });
       embed.addFields(
         { name: 'Civilian word', value: game.wordPair[0], inline: true },
         { name: 'Undercover word', value: game.wordPair[1], inline: true }
       );
-      game.endGame();
-      activeGames.delete(interaction.channel.id);
+      embed.addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
+      game.resetToWaiting();
     } else {
       embed.setFooter({ text: 'Next round — give your one-word hint' });
       game.resetRound();
