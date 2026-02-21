@@ -31,6 +31,24 @@ function getGame(channelId) {
   return activeGames.get(channelId);
 }
 
+function getDisplayName(game, userId) {
+  return game.displayNames?.get(userId) || game.players.get(userId)?.username || 'Unknown';
+}
+
+async function ensureDisplayNames(game, guild) {
+  if (!guild) return;
+  for (const [userId] of game.players) {
+    if (!game.displayNames.has(userId)) {
+      try {
+        const member = await guild.members.fetch(userId);
+        game.displayNames.set(userId, member.displayName || member.user.username);
+      } catch {
+        game.displayNames.set(userId, game.players.get(userId).username);
+      }
+    }
+  }
+}
+
 async function runCommand(interaction) {
   const sub = interaction.options.getSubcommand();
   const channelId = interaction.channel.id;
@@ -147,7 +165,7 @@ async function runCommand(interaction) {
     const orderList = game.getDescribeOrderWithNames();
     const orderText = orderList.map(({ num, name }) => `${num}. ${name}`).join('\n');
     const nextPlayer = game.getNextToDescribe();
-    const nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
+    const nextName = nextPlayer ? getDisplayName(game, nextPlayer.id) : '-';
 
     const embed = new EmbedBuilder()
       .setColor(0xFEE75C)
@@ -206,13 +224,13 @@ async function runCommand(interaction) {
     if (!game.players.has(user.id)) return interaction.reply({ content: '⚠️ You must be in the game', ephemeral: true });
     if (game.phase !== 'describing') return interaction.reply({ content: '⚠️ Not voting phase yet', ephemeral: true });
 
+    await ensureDisplayNames(game, interaction.guild);
     game.startVoting();
     const alive = game.getAlivePlayers();
-    const options = alive.slice(0, 25).map(p => ({
-      label: p.username,
-      value: p.id,
-      description: `Vote for ${p.username}`,
-    }));
+    const options = alive.slice(0, 25).map(p => {
+      const name = getDisplayName(game, p.id);
+      return { label: name, value: p.id, description: `Vote for ${name}` };
+    });
 
     const row = new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
@@ -263,6 +281,7 @@ client.on('interactionCreate', async (interaction) => {
     if (!game || game.phase !== 'voting') {
       return interaction.reply({ content: '⚠️ Cannot vote now', ephemeral: true });
     }
+    await ensureDisplayNames(game, interaction.guild);
 
     const targetId = interaction.values[0];
     const ok = game.vote(interaction.user.id, targetId);
@@ -288,21 +307,24 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (topIds.length > 1) {
-      const embed = new EmbedBuilder()
+      const tieEmbed = new EmbedBuilder()
         .setColor(0xFEE75C)
         .setTitle('🗳️ Vote result — Tie!')
-        .setDescription(`No one eliminated (${maxVotes} votes each). Next round!`);
+        .setDescription(`No one eliminated (${maxVotes} votes each)`);
       game.resetRound();
       const orderList = game.getDescribeOrderWithNames();
       const orderText = orderList.map(({ num, name }) => `${num}. ${name}`).join('\n');
       const nextPlayer = game.getNextToDescribe();
-      const nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
-      embed.addFields(
-        { name: 'Order (next round)', value: orderText, inline: false },
-        { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
-      );
-      embed.setFooter({ text: 'Use /uc vote when everyone has described' });
-      await interaction.channel.send({ embeds: [embed] });
+      const nextName = nextPlayer ? getDisplayName(game, nextPlayer.id) : '-';
+      const nextEmbed = new EmbedBuilder()
+        .setColor(0xFEE75C)
+        .setTitle('Next round')
+        .addFields(
+          { name: 'Order', value: orderText, inline: false },
+          { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
+        )
+        .setFooter({ text: 'Use /uc vote when everyone has described' });
+      await interaction.channel.send({ embeds: [tieEmbed, nextEmbed] });
       return;
     }
 
@@ -310,66 +332,77 @@ client.on('interactionCreate', async (interaction) => {
     const eliminated = game.players.get(eliminatedId);
     game.eliminatePlayer(eliminatedId);
 
-    const embed = new EmbedBuilder()
-      .setColor(0xED4245)
-      .setTitle('🗳️ Vote result')
-      .setDescription(`${eliminated.username} was eliminated (${maxVotes} votes)`);
-
     let roleText = '';
-    if (eliminated.role === ROLES.UNDERCOVER) roleText = '🔴 **Undercover**';
-    else if (eliminated.role === ROLES.MR_WHITE) roleText = '🃏 **Mr. White**';
-    else roleText = '🟢 **Civilian**';
-    embed.addFields({ name: 'Role', value: roleText, inline: false });
+    if (eliminated.role === ROLES.UNDERCOVER) roleText = '🔴 Undercover';
+    else if (eliminated.role === ROLES.MR_WHITE) roleText = '🃏 Mr. White';
+    else roleText = '🟢 Civilian';
 
     if (eliminated.role === ROLES.MR_WHITE) {
+      const voteEmbed = new EmbedBuilder()
+        .setColor(0x99AAB5)
+        .setTitle('🗳️ Vote result')
+        .setDescription(`${getDisplayName(game, eliminatedId)} (${roleText}) — ${maxVotes} votes`);
       game.pendingMrWhiteGuess = eliminatedId;
-      embed.addFields({
-        name: '🃏 Guess the word',
-        value: `${eliminated.username} — Click the button below to guess the Civilian word\nCorrect guess = **Mr. White wins!**`,
-        inline: false,
-      });
+      const guessEmbed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('🃏 Guess the word')
+        .setDescription('Click the button below — correct guess = **Mr. White wins!**');
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`mrwhite_guess_${interaction.channel.id}`)
           .setLabel('Guess word')
           .setStyle(ButtonStyle.Primary)
       );
-      await interaction.channel.send({ embeds: [embed], components: [row] });
+      await interaction.channel.send({ embeds: [voteEmbed, guessEmbed], components: [row] });
       return;
     }
 
     const check = game.checkGameEnd();
 
     if (check.civiliansWin) {
-      embed.addFields({ name: '🏆 Result', value: '**Civilians win!**', inline: false });
-      embed.addFields(
-        { name: 'Civilian word', value: game.wordPair[0], inline: true },
-        { name: 'Undercover word', value: game.wordPair[1], inline: true }
-      );
-      embed.addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
+      const voteEmbed = new EmbedBuilder()
+        .setColor(0x99AAB5)
+        .setTitle('🗳️ Vote result')
+        .setDescription(`${getDisplayName(game, eliminatedId)} (${roleText}) — ${maxVotes} votes`);
+      const resultEmbed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setTitle('🏆 Civilians win!')
+        .setDescription(`Civilian: **${game.wordPair[0]}** · Undercover: **${game.wordPair[1]}**`)
+        .setFooter({ text: 'Use /uc start to play again' });
       game.resetToWaiting();
+      await interaction.channel.send({ embeds: [voteEmbed, resultEmbed] });
     } else if (check.undercoverWin) {
-      embed.addFields({ name: '🏆 Result', value: '**Undercover wins!**', inline: false });
-      embed.addFields(
-        { name: 'Civilian word', value: game.wordPair[0], inline: true },
-        { name: 'Undercover word', value: game.wordPair[1], inline: true }
-      );
-      embed.addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
+      const voteEmbed = new EmbedBuilder()
+        .setColor(0x99AAB5)
+        .setTitle('🗳️ Vote result')
+        .setDescription(`${getDisplayName(game, eliminatedId)} (${roleText}) — ${maxVotes} votes`);
+      const resultEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setTitle('🏆 Undercover wins!')
+        .setDescription(`Civilian: **${game.wordPair[0]}** · Undercover: **${game.wordPair[1]}**`)
+        .setFooter({ text: 'Use /uc start to play again' });
       game.resetToWaiting();
+      await interaction.channel.send({ embeds: [voteEmbed, resultEmbed] });
     } else {
+      const voteEmbed = new EmbedBuilder()
+        .setColor(0x99AAB5)
+        .setTitle('🗳️ Vote result')
+        .setDescription(`${getDisplayName(game, eliminatedId)} (${roleText}) — ${maxVotes} votes`);
       game.resetRound();
       const orderList = game.getDescribeOrderWithNames();
       const orderText = orderList.map(({ num, name }) => `${num}. ${name}`).join('\n');
       const nextPlayer = game.getNextToDescribe();
-      const nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
-      embed.addFields(
-        { name: 'Order (next round)', value: orderText, inline: false },
-        { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
-      );
-      embed.setFooter({ text: 'Next round — give your one-word hint' });
+      const nextName = nextPlayer ? getDisplayName(game, nextPlayer.id) : '-';
+      const nextEmbed = new EmbedBuilder()
+        .setColor(0xFEE75C)
+        .setTitle('Next round')
+        .addFields(
+          { name: 'Order', value: orderText, inline: false },
+          { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
+        )
+        .setFooter({ text: 'Use /uc vote when everyone has described' });
+      await interaction.channel.send({ embeds: [voteEmbed, nextEmbed] });
     }
-
-    await interaction.channel.send({ embeds: [embed] });
   }
 
   if (interaction.isButton() && interaction.customId.startsWith('mrwhite_guess_')) {
@@ -401,59 +434,59 @@ client.on('interactionCreate', async (interaction) => {
     if (!game || !game.pendingMrWhiteGuess) {
       return interaction.reply({ content: '⚠️ Guess time expired', ephemeral: true });
     }
+    await ensureDisplayNames(game, interaction.guild);
     const guess = interaction.fields.getTextInputValue('guess');
     const eliminatedId = game.pendingMrWhiteGuess;
     delete game.pendingMrWhiteGuess;
 
     if (game.checkMrWhiteGuess(guess)) {
-      const embed = new EmbedBuilder()
+      const resultEmbed = new EmbedBuilder()
         .setColor(0x57F287)
-        .setTitle('🃏 Mr. White wins!')
-        .setDescription(`Correctly guessed **${game.wordPair[0]}**!`)
-        .addFields(
-          { name: 'Civilian word', value: game.wordPair[0], inline: true },
-          { name: 'Undercover word', value: game.wordPair[1], inline: true }
-        )
-        .addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
+        .setTitle('🏆 Mr. White wins!')
+        .setDescription(`Correctly guessed **${game.wordPair[0]}**!\n\nCivilian: **${game.wordPair[0]}** · Undercover: **${game.wordPair[1]}**`)
+        .setFooter({ text: 'Use /uc start to play again' });
       game.resetToWaiting();
-      return interaction.reply({ embeds: [embed] });
+      return interaction.reply({ embeds: [resultEmbed] });
     }
 
-    const eliminatedName = game.players.get(eliminatedId)?.username || 'Mr. White';
     const wrongEmbed = new EmbedBuilder()
-      .setColor(0xED4245)
+      .setColor(0x99AAB5)
       .setTitle('❌ Wrong guess')
-      .setDescription(`Your guess: **${guess}**\nCorrect word: **${game.wordPair[0]}**`);
+      .setDescription(`Guessed: **${guess}** · Correct: **${game.wordPair[0]}**`);
 
     const check = game.checkGameEnd();
     if (check.civiliansWin) {
-      wrongEmbed.addFields({ name: '🏆 Result', value: '**Civilians win!**', inline: false });
-      wrongEmbed.addFields(
-        { name: 'Civilian word', value: game.wordPair[0], inline: true },
-        { name: 'Undercover word', value: game.wordPair[1], inline: true }
-      );
-      wrongEmbed.addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
+      const resultEmbed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setTitle('🏆 Civilians win!')
+        .setDescription(`Civilian: **${game.wordPair[0]}** · Undercover: **${game.wordPair[1]}**`)
+        .setFooter({ text: 'Use /uc start to play again' });
       game.resetToWaiting();
+      return interaction.reply({ embeds: [wrongEmbed, resultEmbed] });
     } else if (check.undercoverWin) {
-      wrongEmbed.addFields({ name: '🏆 Result', value: '**Undercover wins!**', inline: false });
-      wrongEmbed.addFields(
-        { name: 'Civilian word', value: game.wordPair[0], inline: true },
-        { name: 'Undercover word', value: game.wordPair[1], inline: true }
-      );
-      wrongEmbed.addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
+      const resultEmbed = new EmbedBuilder()
+        .setColor(0xED4245)
+        .setTitle('🏆 Undercover wins!')
+        .setDescription(`Civilian: **${game.wordPair[0]}** · Undercover: **${game.wordPair[1]}**`)
+        .setFooter({ text: 'Use /uc start to play again' });
       game.resetToWaiting();
+      return interaction.reply({ embeds: [wrongEmbed, resultEmbed] });
     } else {
       game.resetRound();
       const orderList = game.getDescribeOrderWithNames();
       const orderText = orderList.map(({ num, name }) => `${num}. ${name}`).join('\n');
       const nextPlayer = game.getNextToDescribe();
-      const nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
-      wrongEmbed.addFields(
-        { name: 'Order (next round)', value: orderText, inline: false },
-        { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
-      );
+      const nextName = nextPlayer ? getDisplayName(game, nextPlayer.id) : '-';
+      const nextEmbed = new EmbedBuilder()
+        .setColor(0xFEE75C)
+        .setTitle('Next round')
+        .addFields(
+          { name: 'Order', value: orderText, inline: false },
+          { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
+        )
+        .setFooter({ text: 'Use /uc vote when everyone has described' });
+      return interaction.reply({ embeds: [wrongEmbed, nextEmbed] });
     }
-    return interaction.reply({ embeds: [wrongEmbed] });
   }
 });
 
@@ -479,17 +512,9 @@ client.on('messageCreate', async (message) => {
   if (count >= total) {
     await message.reply(`✅ Everyone has described! Use \`/uc vote\` to vote`);
   } else {
+    await ensureDisplayNames(game, message.guild);
     const nextPlayer = game.getNextToDescribe();
-    let nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
-    if (nextPlayer && message.guild && !game.displayNames.has(nextPlayer.id)) {
-      try {
-        const member = await message.guild.members.fetch(nextPlayer.id);
-        nextName = member.displayName || nextPlayer.username;
-        game.displayNames.set(nextPlayer.id, nextName);
-      } catch {
-        nextName = nextPlayer.username;
-      }
-    }
+    const nextName = nextPlayer ? getDisplayName(game, nextPlayer.id) : '-';
     await message.reply(`📝 Recorded (${count}/${total})\n\n**${nextName}** — your turn to give a hint`);
   }
 });
