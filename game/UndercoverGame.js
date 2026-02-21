@@ -82,7 +82,7 @@ class UndercoverGame {
       if (!ok) {
         return {
           success: false,
-          message: '5 คน: เลือกได้ 3 แบบ — Under 1 | Under 2 | Under 1 + Mr. White',
+          message: '5 players: choose Under 1 | Under 2 | Under 1 + Mr. White',
         };
       }
       undercoverCount = optUnder;
@@ -92,17 +92,17 @@ class UndercoverGame {
       const optMrWhite = options.mrWhite ?? false;
       const nonCivilianCount = optUnder + (optMrWhite ? 1 : 0);
       if (optMrWhite && n < 5) {
-        return { success: false, message: 'Mr. White ใช้ได้เมื่อ 5 คนขึ้นไป' };
+        return { success: false, message: 'Mr. White requires at least 5 players' };
       }
       if (optUnder > 3) {
-        return { success: false, message: 'Undercover สูงสุด 3 คน' };
+        return { success: false, message: 'Max 3 Undercover' };
       }
       const maxNonCivilian = Math.floor((n - 1) / 2); // civil > nonCivilian
       if (nonCivilianCount > maxNonCivilian) {
         const maxU = Math.min(3, Math.max(1, maxNonCivilian - (optMrWhite ? 1 : 0)));
         return {
           success: false,
-          message: `Civil ต้องมากกว่าฝั่งอื่น — Undercover สูงสุด ${maxU} คน${optMrWhite ? ' (กับ Mr. White)' : ''}`,
+          message: `Civil must outnumber others — max ${maxU} Undercover${optMrWhite ? ' (with Mr. White)' : ''}`,
         };
       }
       undercoverCount = optUnder;

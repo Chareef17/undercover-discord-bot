@@ -44,14 +44,14 @@ async function runCommand(interaction) {
 **Rules:**
 - Most players get the **same word** (Civilian)
 - 1 player gets a **similar word** (Undercover)
-- With 5+ players, there may be **Mr. White** — no word, ฝ่ายแยก ถ้าถูกโหวตออกให้ทายคำ ถ้าถูก = ชนะ
+- With 5+ players, there may be **Mr. White** — no word, separate faction; if voted out, guess the word to win
 
 **Commands:** Type \`/uc\` and select
 \`\`\`
 /uc create   - Create room (Host)
 /uc join     - Join game
 /uc leave    - Leave room
-/uc start    - Start game — เลือกจำนวน Undercover และ Mr. White ได้
+/uc start    - Start game — choose Undercover count & Mr. White
 /uc word     - View your word
 /uc vote     - Start voting
 /uc end      - End game (Host)
@@ -59,15 +59,15 @@ async function runCommand(interaction) {
 \`\`\`
 
 **How to play:**
-1. Everyone gives a **one-word hint** about their word (พิมพ์ในแชท)
-2. ใช้ \`/uc vote\` เมื่อทุกคนอธิบายแล้ว
+1. Everyone gives a **one-word hint** about their word (type in chat)
+2. Use \`/uc vote\` when everyone has described
 3. Vote for who you think is the Undercover
 4. Player with most votes is eliminated
-5. Civilian ชนะเมื่อ Undercover หมด | Undercover ชนะเมื่อมากกว่า Civilian | Mr. White ชนะเมื่อถูกโหวตออกและทายคำถูก
+5. Civilian wins when Undercover eliminated | Undercover wins when outnumbering Civilian | Mr. White wins when voted out and guesses correctly
 
-**/uc start — เลือกค่า:**
-- \`undercover\`: 1, 2 หรือ 3 (จำนวน Undercover)
-- \`mr_white\`: เลือก **Yes** = มี Mr. White | **No** = ไม่มี (พิมพ์ Yes/No ตัวใหญ่ตัวเล็กก็ได้)
+**/uc start — options:**
+- \`undercover\`: 1, 2 or 3
+- \`mr_white\`: **Yes** = include Mr. White | **No** = exclude
       `)
       .setFooter({ text: `Minimum ${config.minPlayers} players required` });
     return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -84,7 +84,7 @@ async function runCommand(interaction) {
     const embed = new EmbedBuilder()
       .setColor(0x57F287)
       .setTitle('🎮 Game room created!')
-      .setDescription(`${user} สร้างห้อง\n\nใช้ \`/uc join\` เพื่อเข้าร่วม`)
+      .setDescription(`${user} created the room\n\nUse \`/uc join\` to join`)
       .addFields({ name: 'Players', value: `1/${config.maxPlayers}`, inline: true })
       .addFields({ name: 'Start game', value: '`/uc start`', inline: true })
       .setFooter({ text: `Need at least ${config.minPlayers} players` });
@@ -152,15 +152,15 @@ async function runCommand(interaction) {
     const embed = new EmbedBuilder()
       .setColor(0xFEE75C)
       .setTitle('🎭 Game started!')
-      .setDescription(`ทุกคนจะได้คำทาง **DM**!\n\nพิมพ์คำอธิบาย **1 คำ** ในแชท (ตัวใหญ่ตัวเล็กไม่มีผล)`)
+      .setDescription(`Everyone will receive their word via **DM**!\n\nType your **one-word hint** in chat (case insensitive)`)
       .addFields(
         { name: 'Players', value: String(game.getPlayerCount()), inline: true },
         { name: 'Undercover', value: String(result.undercoverCount), inline: true },
         { name: 'Mr. White', value: result.hasMrWhite ? 'Yes' : 'No', inline: true },
-        { name: 'ลำดับการพิมพ์', value: orderText, inline: false },
-        { name: 'ถึงรอบ', value: `**${nextName}** ให้พิมพ์ใบ้`, inline: false }
+        { name: 'Order', value: orderText, inline: false },
+        { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
       )
-      .setFooter({ text: 'ใช้ /uc vote เมื่อทุกคนอธิบายแล้ว' });
+      .setFooter({ text: 'Use /uc vote when everyone has described' });
 
     for (const [userId, player] of game.players) {
       try {
@@ -276,14 +276,37 @@ client.on('interactionCreate', async (interaction) => {
 
     const counts = game.getVoteCounts();
     let maxVotes = 0;
-    let eliminatedId = null;
+    const topIds = [];
     for (const [id, count] of counts) {
       if (count > maxVotes) {
         maxVotes = count;
-        eliminatedId = id;
+        topIds.length = 0;
+        topIds.push(id);
+      } else if (count === maxVotes) {
+        topIds.push(id);
       }
     }
 
+    if (topIds.length > 1) {
+      const embed = new EmbedBuilder()
+        .setColor(0xFEE75C)
+        .setTitle('🗳️ Vote result — Tie!')
+        .setDescription(`No one eliminated (${maxVotes} votes each). Next round!`);
+      game.resetRound();
+      const orderList = game.getDescribeOrderWithNames();
+      const orderText = orderList.map(({ num, name }) => `${num}. ${name}`).join('\n');
+      const nextPlayer = game.getNextToDescribe();
+      const nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
+      embed.addFields(
+        { name: 'Order (next round)', value: orderText, inline: false },
+        { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
+      );
+      embed.setFooter({ text: 'Use /uc vote when everyone has described' });
+      await interaction.channel.send({ embeds: [embed] });
+      return;
+    }
+
+    const eliminatedId = topIds[0];
     const eliminated = game.players.get(eliminatedId);
     game.eliminatePlayer(eliminatedId);
 
@@ -301,14 +324,14 @@ client.on('interactionCreate', async (interaction) => {
     if (eliminated.role === ROLES.MR_WHITE) {
       game.pendingMrWhiteGuess = eliminatedId;
       embed.addFields({
-        name: '🃏 โอกาสทายคำ',
-        value: `${eliminated.username} — กดปุ่มด้านล่างเพื่อทายคำของ Civilian\nถ้าทายถูก = **Mr. White ชนะ!**`,
+        name: '🃏 Guess the word',
+        value: `${eliminated.username} — Click the button below to guess the Civilian word\nCorrect guess = **Mr. White wins!**`,
         inline: false,
       });
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`mrwhite_guess_${interaction.channel.id}`)
-          .setLabel('ทายคำ')
+          .setLabel('Guess word')
           .setStyle(ButtonStyle.Primary)
       );
       await interaction.channel.send({ embeds: [embed], components: [row] });
@@ -319,6 +342,10 @@ client.on('interactionCreate', async (interaction) => {
 
     if (check.civiliansWin) {
       embed.addFields({ name: '🏆 Result', value: '**Civilians win!**', inline: false });
+      embed.addFields(
+        { name: 'Civilian word', value: game.wordPair[0], inline: true },
+        { name: 'Undercover word', value: game.wordPair[1], inline: true }
+      );
       embed.addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
       game.resetToWaiting();
     } else if (check.undercoverWin) {
@@ -336,8 +363,8 @@ client.on('interactionCreate', async (interaction) => {
       const nextPlayer = game.getNextToDescribe();
       const nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
       embed.addFields(
-        { name: 'ลำดับการพิมพ์ (รอบถัดไป)', value: orderText, inline: false },
-        { name: 'ถึงรอบ', value: `**${nextName}** ให้พิมพ์ใบ้`, inline: false }
+        { name: 'Order (next round)', value: orderText, inline: false },
+        { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
       );
       embed.setFooter({ text: 'Next round — give your one-word hint' });
     }
@@ -349,19 +376,19 @@ client.on('interactionCreate', async (interaction) => {
     const channelId = interaction.customId.replace('mrwhite_guess_', '');
     const game = getGame(channelId);
     if (!game || !game.pendingMrWhiteGuess) {
-      return interaction.reply({ content: '⚠️ ไม่สามารถทำได้', ephemeral: true });
+      return interaction.reply({ content: '⚠️ Cannot do this', ephemeral: true });
     }
     if (interaction.user.id !== game.pendingMrWhiteGuess) {
-      return interaction.reply({ content: '⚠️ เฉพาะ Mr. White ที่ถูกโหวตออกเท่านั้น', ephemeral: true });
+      return interaction.reply({ content: '⚠️ Only the voted-out Mr. White can guess', ephemeral: true });
     }
     const modal = new ModalBuilder()
       .setCustomId(`mrwhite_modal_${channelId}`)
-      .setTitle('ทายคำของ Civilian');
+      .setTitle('Guess the Civilian word');
     const input = new TextInputBuilder()
       .setCustomId('guess')
-      .setLabel('พิมพ์คำที่คิดว่าเป็นคำของ Civilian')
+      .setLabel('Type the word you think Civilians have')
       .setStyle(TextInputStyle.Short)
-      .setPlaceholder('คำ 1 คำ')
+      .setPlaceholder('One word')
       .setMaxLength(50)
       .setRequired(true);
     modal.addComponents(new ActionRowBuilder().addComponents(input));
@@ -372,7 +399,7 @@ client.on('interactionCreate', async (interaction) => {
     const channelId = interaction.customId.replace('mrwhite_modal_', '');
     const game = getGame(channelId);
     if (!game || !game.pendingMrWhiteGuess) {
-      return interaction.reply({ content: '⚠️ หมดเวลาทายคำ', ephemeral: true });
+      return interaction.reply({ content: '⚠️ Guess time expired', ephemeral: true });
     }
     const guess = interaction.fields.getTextInputValue('guess');
     const eliminatedId = game.pendingMrWhiteGuess;
@@ -381,8 +408,12 @@ client.on('interactionCreate', async (interaction) => {
     if (game.checkMrWhiteGuess(guess)) {
       const embed = new EmbedBuilder()
         .setColor(0x57F287)
-        .setTitle('🃏 Mr. White ชนะ!')
-        .setDescription(`ทายคำ **${game.wordPair[0]}** ถูกต้อง!`)
+        .setTitle('🃏 Mr. White wins!')
+        .setDescription(`Correctly guessed **${game.wordPair[0]}**!`)
+        .addFields(
+          { name: 'Civilian word', value: game.wordPair[0], inline: true },
+          { name: 'Undercover word', value: game.wordPair[1], inline: true }
+        )
         .addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
       game.resetToWaiting();
       return interaction.reply({ embeds: [embed] });
@@ -391,12 +422,16 @@ client.on('interactionCreate', async (interaction) => {
     const eliminatedName = game.players.get(eliminatedId)?.username || 'Mr. White';
     const wrongEmbed = new EmbedBuilder()
       .setColor(0xED4245)
-      .setTitle('❌ ทายผิด')
-      .setDescription(`คำตอบที่ทาย: **${guess}**\nคำที่ถูกต้อง: **${game.wordPair[0]}**`);
+      .setTitle('❌ Wrong guess')
+      .setDescription(`Your guess: **${guess}**\nCorrect word: **${game.wordPair[0]}**`);
 
     const check = game.checkGameEnd();
     if (check.civiliansWin) {
       wrongEmbed.addFields({ name: '🏆 Result', value: '**Civilians win!**', inline: false });
+      wrongEmbed.addFields(
+        { name: 'Civilian word', value: game.wordPair[0], inline: true },
+        { name: 'Undercover word', value: game.wordPair[1], inline: true }
+      );
       wrongEmbed.addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
       game.resetToWaiting();
     } else if (check.undercoverWin) {
@@ -414,8 +449,8 @@ client.on('interactionCreate', async (interaction) => {
       const nextPlayer = game.getNextToDescribe();
       const nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
       wrongEmbed.addFields(
-        { name: 'ลำดับการพิมพ์ (รอบถัดไป)', value: orderText, inline: false },
-        { name: 'ถึงรอบ', value: `**${nextName}** ให้พิมพ์ใบ้`, inline: false }
+        { name: 'Order (next round)', value: orderText, inline: false },
+        { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
       );
     }
     return interaction.reply({ embeds: [wrongEmbed] });
@@ -442,7 +477,7 @@ client.on('messageCreate', async (message) => {
   const total = game.getAlivePlayers().length;
 
   if (count >= total) {
-    await message.reply(`✅ ทุกคนอธิบายแล้ว! ใช้ \`/uc vote\` เพื่อโหวต`);
+    await message.reply(`✅ Everyone has described! Use \`/uc vote\` to vote`);
   } else {
     const nextPlayer = game.getNextToDescribe();
     let nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
@@ -455,7 +490,7 @@ client.on('messageCreate', async (message) => {
         nextName = nextPlayer.username;
       }
     }
-    await message.reply(`📝 บันทึกแล้ว (${count}/${total})\n\nถึงรอบ **${nextName}** ให้พิมพ์ใบ้`);
+    await message.reply(`📝 Recorded (${count}/${total})\n\n**${nextName}** — your turn to give a hint`);
   }
 });
 
