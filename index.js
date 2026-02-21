@@ -46,7 +46,7 @@ async function runCommand(interaction) {
 /uc create   - Create room (Host)
 /uc join     - Join game
 /uc leave    - Leave room
-/uc start    - Start game (Host)
+/uc start    - Start game (Host) — เลือกจำนวน Undercover และ Mr. White ได้
 /uc word     - View your word
 /uc vote     - Start voting (Host)
 /uc end      - End game (Host)
@@ -54,11 +54,15 @@ async function runCommand(interaction) {
 \`\`\`
 
 **How to play:**
-1. Everyone gives a **one-word hint** about their word
+1. Everyone gives a **one-word hint** about their word (พิมพ์ในแชท)
 2. Host uses \`/uc vote\` when everyone has described
 3. Vote for who you think is the Undercover
 4. Player with most votes is eliminated
 5. Civilians win by eliminating all Undercover
+
+**/uc start — เลือกค่า:**
+- \`undercover\`: 1, 2 หรือ 3 (จำนวน Undercover)
+- \`mr_white\`: เลือก **Yes** = มี Mr. White | **No** = ไม่มี (พิมพ์ Yes/No ตัวใหญ่ตัวเล็กก็ได้)
       `)
       .setFooter({ text: `Minimum ${config.minPlayers} players required` });
     return interaction.reply({ embeds: [embed], ephemeral: true });
@@ -113,7 +117,12 @@ async function runCommand(interaction) {
     if (!game) return interaction.reply({ content: '⚠️ No game', ephemeral: true });
     if (game.hostId !== user.id) return interaction.reply({ content: '⚠️ Host only', ephemeral: true });
 
-    const result = game.start();
+    const undercoverOpt = interaction.options.getInteger('undercover');
+    const mrWhiteOpt = interaction.options.getBoolean('mr_white');
+    const result = game.start({
+      undercoverCount: undercoverOpt ?? 1,
+      mrWhite: mrWhiteOpt ?? false,
+    });
     if (!result.success) return interaction.reply({ content: result.message, ephemeral: true });
 
     await interaction.deferReply();
@@ -121,9 +130,10 @@ async function runCommand(interaction) {
     const embed = new EmbedBuilder()
       .setColor(0xFEE75C)
       .setTitle('🎭 Game started!')
-      .setDescription(`Everyone will receive their word via **DM**!\n\nGive a **one-word hint** about your word (type in chat)`)
+      .setDescription(`Everyone will receive their word via **DM**!\n\nพิมพ์คำอธิบาย **1 คำ** ในแชท (ตัวใหญ่ตัวเล็กไม่มีผล)`)
       .addFields(
         { name: 'Players', value: String(game.getPlayerCount()), inline: true },
+        { name: 'Undercover', value: String(result.undercoverCount), inline: true },
         { name: 'Mr. White', value: result.hasMrWhite ? 'Yes' : 'No', inline: true }
       )
       .setFooter({ text: 'Host uses /uc vote when everyone has described' });

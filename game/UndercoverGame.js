@@ -50,26 +50,78 @@ class UndercoverGame {
     return this.players.size >= this.minPlayers && this.phase === 'waiting';
   }
 
-  start() {
+  start(options = {}) {
     if (!this.canStart()) return { success: false, message: 'Not enough players (need at least ' + this.minPlayers + ')' };
 
     const playerList = [...this.players.values()];
+    const n = playerList.length;
+
+    let undercoverCount, wantMrWhite;
+
+    // Civil ต้องมากกว่า Undercover+Mr.White เสมอ
+    if (n === 4) {
+      undercoverCount = 1;
+      wantMrWhite = false;
+    } else if (n === 5) {
+      // 5 คน: Civil 4 Under 1 | Civil 3 Under 2 | Civil 3 Under 1 White 1
+      const optUnder = options.undercoverCount ?? 1;
+      const optMrWhite = options.mrWhite ?? false;
+      const ok =
+        (optUnder === 1 && !optMrWhite) ||
+        (optUnder === 2 && !optMrWhite) ||
+        (optUnder === 1 && optMrWhite);
+      if (!ok) {
+        return {
+          success: false,
+          message: '5 คน: เลือกได้ 3 แบบ — Under 1 | Under 2 | Under 1 + Mr. White',
+        };
+      }
+      undercoverCount = optUnder;
+      wantMrWhite = optMrWhite;
+    } else {
+      const optUnder = options.undercoverCount ?? 1;
+      const optMrWhite = options.mrWhite ?? false;
+      const nonCivilianCount = optUnder + (optMrWhite ? 1 : 0);
+      if (optMrWhite && n < 5) {
+        return { success: false, message: 'Mr. White ใช้ได้เมื่อ 5 คนขึ้นไป' };
+      }
+      if (optUnder > 3) {
+        return { success: false, message: 'Undercover สูงสุด 3 คน' };
+      }
+      const maxNonCivilian = Math.floor((n - 1) / 2); // civil > nonCivilian
+      if (nonCivilianCount > maxNonCivilian) {
+        const maxU = Math.min(3, Math.max(1, maxNonCivilian - (optMrWhite ? 1 : 0)));
+        return {
+          success: false,
+          message: `Civil ต้องมากกว่าฝั่งอื่น — Undercover สูงสุด ${maxU} คน${optMrWhite ? ' (กับ Mr. White)' : ''}`,
+        };
+      }
+      undercoverCount = optUnder;
+      wantMrWhite = optMrWhite;
+    }
+
     const pair = words[Math.floor(Math.random() * words.length)];
     const [civilianWord, undercoverWord] = pair;
 
-    // เลือก Undercover 1 คน
-    const undercoverIndex = Math.floor(Math.random() * playerList.length);
-    
-    // ถ้ามี 5+ คน มีโอกาสได้ Mr. White
+    const indices = playerList.map((_, i) => i);
+    const shuffle = (arr) => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+    const shuffled = shuffle([...indices]);
+
+    const undercoverIndices = new Set(shuffled.slice(0, undercoverCount));
     let mrWhiteIndex = -1;
-    if (playerList.length >= 5 && Math.random() < 0.3) {
-      do {
-        mrWhiteIndex = Math.floor(Math.random() * playerList.length);
-      } while (mrWhiteIndex === undercoverIndex);
+    if (wantMrWhite) {
+      const remain = shuffled.slice(undercoverCount);
+      mrWhiteIndex = remain[0];
     }
 
     playerList.forEach((player, i) => {
-      if (i === undercoverIndex) {
+      if (undercoverIndices.has(i)) {
         player.role = ROLES.UNDERCOVER;
         player.word = undercoverWord;
       } else if (i === mrWhiteIndex) {
@@ -92,6 +144,7 @@ class UndercoverGame {
       civilianWord,
       undercoverWord,
       hasMrWhite: mrWhiteIndex >= 0,
+      undercoverCount,
     };
   }
 
