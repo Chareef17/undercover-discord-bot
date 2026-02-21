@@ -4,12 +4,11 @@
 
 ## ความต้องการ
 
-- **Node.js 18+** (discord.js v14 ต้องการ Node 18 ขึ้นไป)
+- **Node.js 18+** (ใช้ `nvm use` ถ้ามี .nvmrc)
 
 ## การติดตั้ง
 
 ```bash
-cd discord-undercover-bot
 npm install
 ```
 
@@ -21,15 +20,15 @@ cp .env.example .env
 ```
 
 2. ดึง Bot Token จาก [Discord Developer Portal](https://discord.com/developers/applications):
-   - สร้าง Application
-   - ไปที่ Bot > Reset Token และคัดลอก Token
+   - สร้าง Application → Bot → Reset Token
    - เปิด **Message Content Intent** และ **Server Members Intent**
-   - เชิญบอทเข้าเซิร์ฟเวอร์ด้วย OAuth2 (Scope: **bot** และ **applications.commands**)
+   - เชิญบอท: OAuth2 → URL Generator → Scopes: `bot` → Copy URL
 
-3. ใส่ Token ในไฟล์ `.env`:
+3. ใส่ Token ใน `.env`:
 ```
-DISCORD_TOKEN=your_bot_token_here
+DISCORD_TOKEN=your_token_here
 ```
+(ไม่ต้องใส่ `""` รอบ token)
 
 ## รันบอท
 
@@ -39,31 +38,53 @@ npm start
 
 ## คำสั่ง
 
-พิมพ์ `/uc` แล้วเลือกคำสั่ง (Slash Commands):
-
 | คำสั่ง | คำอธิบาย |
 |--------|----------|
 | `/uc create` | สร้างห้องเกม (คุณเป็น Host) |
 | `/uc join` | เข้าร่วมเกม |
 | `/uc leave` | ออกจากห้อง |
-| `/uc start` | เริ่มเกม (Host) |
-| `/uc word` | ดูคำของตัวเอง |
+| `/uc start` | เริ่มเกม (Host) — เลือกจำนวน Undercover และ Mr. White |
+| `/uc word` | ดูคำของตัวเอง (ส่งทาง DM) |
 | `/uc vote` | เริ่มช่วงโหวต (Host) |
 | `/uc end` | จบเกม (Host) |
 | `/uc help` | แสดงวิธีเล่น |
 
+### /uc start — ตัวเลือก
+
+| ตัวเลือก | ค่า | คำอธิบาย |
+|----------|-----|----------|
+| `undercover` | 1, 2 หรือ 3 | จำนวน Undercover |
+| `mr_white` | Yes / No | มี Mr. White หรือไม่ (ต้อง 5 คนขึ้นไป) |
+
 ## กติกาเกม
 
-- **Civilian** (คนส่วนใหญ่): ได้คำเดียวกัน เช่น "แอปเปิล"
-- **Undercover** (1 คน): ได้คำใกล้เคียง เช่น "ส้ม"
-- **Mr. White** (ถ้ามี 5+ คน): ไม่ได้คำเลย — ต้องแอบทำตัวว่าคิดออก
+### บทบาท
+- **Civilian**: ได้คำเดียวกัน (คนส่วนใหญ่)
+- **Undercover**: ได้คำใกล้เคียง (ซ่อนในกลุ่ม)
+- **Mr. White**: ไม่ได้คำเลย — แกล้งว่าคิดออก (ใช้ได้เมื่อ 5 คนขึ้นไป)
 
-แต่ละรอบ:
-1. ทุกคนบอก **คำอธิบาย 1 คำ** เกี่ยวกับคำของตัวเอง
-2. Host uses `/uc vote` when everyone has described
+### กฎสำคัญ
+- **Civil ต้องมากกว่า** (Undercover + Mr. White) เสมอ
+- **Undercover สูงสุด 3 คน**
+
+### การกระจายบทบาทตามจำนวนคน
+
+| คน | ตัวเลือก |
+|----|----------|
+| 3–4 | Civil มากกว่า, Under 1 |
+| 5 | Under 1 \| Under 2 \| Under 1 + Mr. White |
+| 6+ | เลือก Under 1–3 และ Mr. White ได้ (ภายใต้กฎ Civil > ฝั่งอื่น) |
+
+### วิธีเล่น
+1. ทุกคนพิมพ์ **คำอธิบาย 1 คำ** ในแชท
+2. Host ใช้ `/uc vote` เมื่อทุกคนอธิบายแล้ว
 3. โหวตคนที่คิดว่าเป็น Undercover
 4. คนที่ได้โหวตมากที่สุดถูก淘汰
-5. Civilian ชนะเมื่อ淘汰 Undercover ได้หมด | Undercover ชนะเมื่อเหลือคนน้อยกว่าเท่ากับ Undercover
+5. **Civilian ชนะ** เมื่อ淘汰 Undercover + Mr. White ได้หมด
+6. **Undercover ชนะ** เมื่อ (Undercover + Mr. White) มากกว่า Civilian
+
+### เล่นรอบถัดไป
+เกมจบแล้วสามารถกด `/uc start` เล่นต่อได้เลย ไม่ต้อง `/uc create` ใหม่
 
 ## โครงสร้างโปรเจกต์
 
@@ -71,12 +92,11 @@ npm start
 discord-undercover-bot/
 ├── index.js          # Main bot & commands
 ├── config.js         # Configuration
-├── words.js          # คำคู่สำหรับเกม
+├── words.js          # คำคู่ [Civilian, Undercover]
 ├── game/
-│   └── UndercoverGame.js  # Logic เกม
-├── commands.js      # Slash Commands
-├── package.json
-└── README.md
+│   └── UndercoverGame.js
+├── commands.js
+└── .env
 ```
 
 ## เพิ่มคำใหม่
