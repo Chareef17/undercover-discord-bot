@@ -110,7 +110,9 @@ class UndercoverGame {
     }
 
     const pair = words[Math.floor(Math.random() * words.length)];
-    const [civilianWord, undercoverWord] = pair;
+    const swap = Math.random() < 0.5;
+    const civilianWord = swap ? pair[1] : pair[0];
+    const undercoverWord = swap ? pair[0] : pair[1];
 
     const indices = playerList.map((_, i) => i);
     const shuffled = shuffle(indices);
@@ -135,7 +137,7 @@ class UndercoverGame {
       }
     });
 
-    this.wordPair = pair;
+    this.wordPair = [civilianWord, undercoverWord];
     this.phase = 'describing';
     this.currentRound = 1;
     this.descriptions.clear();

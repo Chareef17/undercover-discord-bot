@@ -1,5 +1,5 @@
-// Word pairs for Undercover - [civilian word, undercover word]
-// Civilians get the first word, Undercover gets the second
+// Word pairs for Undercover - [word A, word B]
+// Each game randomly assigns A or B to Civilian, the other to Undercover
 module.exports = [
   ['แอปเปิล', 'ส้ม'],
   ['สุนัข', 'หมาจิ้งจอก'],
