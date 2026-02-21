@@ -1,118 +1,106 @@
 # 🎭 Discord Undercover Bot
 
-บอท Discord สำหรับเล่นเกม **Undercover** (ลับหรือเปล่า) ภาษาไทย
+บอทเล่นเกม **Undercover** (ลับหรือเปล่า) ใน Discord
 
-## ความต้องการ
+---
 
-- **Node.js 18+** (ใช้ `nvm use` ถ้ามี .nvmrc)
-
-## การติดตั้ง
+## 🚀 เริ่มต้นเร็ว
 
 ```bash
 npm install
-```
-
-## การตั้งค่า
-
-1. สร้างไฟล์ `.env` จาก template:
-```bash
 cp .env.example .env
-```
-
-2. ดึง Bot Token จาก [Discord Developer Portal](https://discord.com/developers/applications):
-   - สร้าง Application → Bot → Reset Token
-   - เปิด **Message Content Intent** และ **Server Members Intent**
-   - เชิญบอท: OAuth2 → URL Generator → Scopes: `bot` → Copy URL
-
-3. ใส่ Token ใน `.env`:
-```
-DISCORD_TOKEN=your_token_here
-```
-(ไม่ต้องใส่ `""` รอบ token)
-
-## รันบอท
-
-```bash
+# ใส่ DISCORD_TOKEN ใน .env
 npm start
 ```
 
-## คำสั่ง
+---
 
-| คำสั่ง | คำอธิบาย |
-|--------|----------|
-| `/uc create` | สร้างห้องเกม (คุณเป็น Host) |
-| `/uc join` | เข้าร่วมเกม |
+## 📦 ติดตั้งแบบละเอียด
+
+### สิ่งที่ต้องมี
+- Node.js 18+
+
+### ขั้นตอน
+
+1. ติดตั้ง: `npm install`
+2. คัดลอกไฟล์ตั้งค่า: `cp .env.example .env`
+3. เอา Bot Token จาก [Discord Developer Portal](https://discord.com/developers/applications)
+   - สร้าง Application → Bot → Reset Token
+   - เปิด **Message Content Intent** และ **Server Members Intent**
+   - เชิญบอท: OAuth2 → URL Generator → Scopes: `bot`
+4. ใส่ Token ใน `.env` แบบนี้:
+   ```
+   DISCORD_TOKEN=ใส่โทเค็นตรงนี้
+   ```
+5. รัน: `npm start`
+
+---
+
+## 📋 คำสั่ง
+
+| คำสั่ง | ทำอะไร |
+|--------|--------|
+| `/uc create` | สร้างห้อง (คนกดเป็น Host) |
+| `/uc join` | เข้าเล่น |
 | `/uc leave` | ออกจากห้อง |
-| `/uc start` | เริ่มเกม — เลือกจำนวน Undercover และ Mr. White (ใช้ได้ทุกคนในห้อง) |
+| `/uc start` | เริ่มเกม |
 | `/uc word` | ดูคำของตัวเอง (ส่งทาง DM) |
-| `/uc vote` | เริ่มช่วงโหวต (ใช้ได้ทุกคนในห้อง) |
-| `/uc end` | จบเกม (Host) |
-| `/uc help` | แสดงวิธีเล่น |
+| `/uc vote` | โหวตคนที่คิดว่า Undercover |
+| `/uc end` | จบเกม (Host เท่านั้น) |
+| `/uc help` | ดูวิธีเล่นในเกม |
 
-### /uc start — ตัวเลือก
+### ตอนเริ่มเกม (/uc start)
 
-| ตัวเลือก | ค่า | คำอธิบาย |
-|----------|-----|----------|
-| `undercover` | 1, 2 หรือ 3 | จำนวน Undercover |
-| `mr_white` | Yes / No | มี Mr. White หรือไม่ (ต้อง 5 คนขึ้นไป) |
+- **undercover**: เลือก 1, 2 หรือ 3 คน (แล้วแต่จำนวนผู้เล่น)
+- **mr_white**: เปิด/ปิด Mr. White (ใช้ได้เมื่อ 5 คนขึ้นไป)
 
-## กติกาเกม
+---
 
-### บทบาท (3 ฝ่ายแยกกัน)
-- **Civilian**: ได้คำเดียวกัน ต้องโหวต Undercover ออกให้หมด
-- **Undercover**: ได้คำใกล้เคียง ซ่อนตัวในกลุ่ม ให้เหลือมากกว่า Civilian
-- **Mr. White**: ไม่ได้คำเลย ทำเนียนแกล้งรู้คำ ถ้าถูกโหวตออกให้ทายคำ Civilian ถ้าทายถูก = ชนะ (ใช้ได้เมื่อ 5 คนขึ้นไป)
+## 🎮 วิธีเล่นแบบย่อ
 
-### กฎสำคัญ
-- **Civil ต้องมากกว่า** (Undercover + Mr. White) เสมอ
-- **Undercover สูงสุด 3 คน**
+### 3 ฝ่าย
 
-### การกระจายบทบาทตามจำนวนคน
+| ฝ่าย | ได้อะไร | เป้าหมาย |
+|------|---------|----------|
+| **Civilian** | คำเดียวกันทั้งกลุ่ม | โหวต Undercover ให้หมด |
+| **Undercover** | คำที่คล้ายกัน แต่คนละคำ | ซ่อนตัว ไม่ให้โดนโหวตออก |
+| **Mr. White** | ไม่ได้คำ | แกล้งรู้คำ ถ้าถูกโหวตออก → ทายคำ Civilian ถูก = ชนะ |
 
-| คน | ตัวเลือก |
-|----|----------|
-| 3–4 | Civil มากกว่า, Under 1 |
-| 5 | Under 1 \| Under 2 \| Under 1 + Mr. White |
-| 6+ | เลือก Under 1–3 และ Mr. White ได้ (ภายใต้กฎ Civil > ฝั่งอื่น) |
+### ขั้นตอนเล่น
 
-### วิธีเล่น
-1. บอทจะสุ่ม **ลำดับการพิมพ์** — Mr. White จะไม่เป็นคนแรก
-2. ทุกคนพิมพ์ **คำอธิบาย 1 คำ** ตามลำดับที่กำหนด
-3. บอทแจ้งชื่อคนที่ต้องพิมพ์ใบ้ถัดไป (ใช้ Display Name)
-4. ใช้ `/uc vote` เมื่อทุกคนอธิบายแล้ว
-5. โหวตคนที่คิดว่าเป็น Undercover
-6. คนที่ได้โหวตมากที่สุดถูกคัดออก
-7. ถ้าคนที่ถูกคัดออกเป็น **Mr. White** → กดปุ่ม "ทายคำ" และพิมพ์คำของ Civilian ถ้าถูก = Mr. White ชนะ
+1. `/uc create` → `/uc join` → `/uc start`
+2. ทุกคนดูคำของตัวเองด้วย `/uc word`
+3. วนอธิบายคำทีละคน (บอทจะบอกลำดับ)
+4. พอครบ → `/uc vote` โหวตคนที่คิดว่า Undercover
+5. คนได้โหวตมากสุดถูกคัดออก
+6. เล่นต่อจนมีฝ่ายชนะ
 
-### แพ้ชนะ
+### ชนะเมื่อไหร่
 
-| ฝ่าย | ชนะเมื่อ |
-|------|----------|
-| **Civilian** | โหวต Undercover ออกจนหมด |
-| **Undercover** | จำนวน Undercover > Civilian (Mr. White ไม่นับรวม) |
-| **Mr. White** | ถูกโหวตออก แล้วทายคำของ Civilian ถูกต้อง |
+- **Civilian** ชนะ = โหวต Undercover ออกหมด
+- **Undercover** ชนะ = เหลือ Undercover มากกว่า Civilian
+- **Mr. White** ชนะ = ถูกโหวตออก แล้วทายคำ Civilian ถูก
 
-### ลำดับการพิมพ์
-- สุ่มลำดับทุกครั้งที่เริ่มเกมและทุกรอบ
-- **Mr. White ห้ามเป็นคนแรก**
-- บอทแสดงรายชื่อตามลำดับและบอก "ถึงรอบ **ชื่อ** ให้พิมพ์ใบ้"
+### กติกาพื้นฐาน
 
-### เล่นรอบถัดไป
-เกมจบแล้วสามารถกด `/uc start` เล่นต่อได้เลย ไม่ต้อง `/uc create` ใหม่
+- Civilian ต้องมากกว่า Undercover + Mr. White เสมอ
+- Undercover สูงสุด 3 คน
+- Mr. White ใช้ได้เมื่อ 5 คนขึ้นไป
+- เล่นรอบใหม่กด `/uc start` ได้เลย ไม่ต้องสร้างห้องใหม่
 
-## โครงสร้างโปรเจกต์
+---
+
+## 📁 โครงสร้างไฟล์
 
 ```
-discord-undercover-bot/
-├── index.js          # Main bot & commands
-├── config.js         # Configuration
-├── words.js          # คำคู่ [Civilian, Undercover]
+├── index.js      # บอทหลัก + คำสั่ง
+├── config.js     # ตั้งค่า
+├── words.js      # รายการคำ (สุ่มซ้าย/ขวาให้ Civil / Under)
 ├── game/
 │   └── UndercoverGame.js
-├── commands.js
-└── .env
+└── commands.js
 ```
 
-## เพิ่มคำใหม่
+### เพิ่มคำ
 
-แก้ไข `words.js` — แต่ละแถวคือ `[คำ Civilian, คำ Undercover]`
+แก้ `words.js` — แต่ละบรรทัดคือ `['คำที่หนึ่ง', 'คำที่สอง']` เกมจะสุ่มให้ฝั่ง Civil / Under เอง
