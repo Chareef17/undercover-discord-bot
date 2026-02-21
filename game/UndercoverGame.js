@@ -1,5 +1,14 @@
 const words = require('../words');
 
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 const ROLES = {
   CIVILIAN: 'civilian',   // ได้คำปกติ
   UNDERCOVER: 'undercover', // ได้คำอื่น
@@ -104,14 +113,7 @@ class UndercoverGame {
     const [civilianWord, undercoverWord] = pair;
 
     const indices = playerList.map((_, i) => i);
-    const shuffle = (arr) => {
-      for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
-      }
-      return arr;
-    };
-    const shuffled = shuffle([...indices]);
+    const shuffled = shuffle(indices);
 
     const undercoverIndices = new Set(shuffled.slice(0, undercoverCount));
     let mrWhiteIndex = -1;
@@ -141,16 +143,7 @@ class UndercoverGame {
 
     // ลำดับการพิมพ์ — Mr. White ห้ามเป็นคนแรก
     const alive = this.getAlivePlayers();
-    const mrWhitePlayers = alive.filter(p => p.role === ROLES.MR_WHITE);
     const nonMrWhite = alive.filter(p => p.role !== ROLES.MR_WHITE);
-    const shuffle = (arr) => {
-      const a = [...arr];
-      for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-      }
-      return a;
-    };
     const firstPlayer = nonMrWhite[Math.floor(Math.random() * nonMrWhite.length)];
     const rest = shuffle(alive.filter(p => p.id !== firstPlayer.id));
     this.describeOrder = [firstPlayer, ...rest];
@@ -268,16 +261,7 @@ class UndercoverGame {
     this.phase = 'describing';
     [...this.players.values()].forEach(p => { p.voted = false; });
     const alive = this.getAlivePlayers();
-    const mrWhitePlayers = alive.filter(p => p.role === ROLES.MR_WHITE);
     const nonMrWhite = alive.filter(p => p.role !== ROLES.MR_WHITE);
-    const shuffle = (arr) => {
-      const a = [...arr];
-      for (let i = a.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [a[i], a[j]] = [a[j], a[i]];
-      }
-      return a;
-    };
     const firstPlayer = nonMrWhite[Math.floor(Math.random() * nonMrWhite.length)];
     const rest = shuffle(alive.filter(p => p.id !== firstPlayer.id));
     this.describeOrder = [firstPlayer, ...rest];
