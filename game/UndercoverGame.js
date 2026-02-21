@@ -67,39 +67,23 @@ class UndercoverGame {
 
     let undercoverCount, wantMrWhite;
 
-    // Civil ต้องมากกว่า Undercover+Mr.White เสมอ
-    if (n === 4) {
+    // Civil > Undercover + Mr.White เสมอ
+    const optUnder = options.undercoverCount ?? 1;
+    const optMrWhite = options.mrWhite ?? false;
+
+    if (n === 3 || n === 4) {
       undercoverCount = 1;
       wantMrWhite = false;
-    } else if (n === 5) {
-      // 5 คน: Civil 4 Under 1 | Civil 3 Under 2 | Civil 3 Under 1 White 1
-      const optUnder = options.undercoverCount ?? 1;
-      const optMrWhite = options.mrWhite ?? false;
-      const ok =
-        (optUnder === 1 && !optMrWhite) ||
-        (optUnder === 2 && !optMrWhite) ||
-        (optUnder === 1 && optMrWhite);
-      if (!ok) {
-        return {
-          success: false,
-          message: '5 players: choose Under 1 | Under 2 | Under 1 + Mr. White',
-        };
-      }
-      undercoverCount = optUnder;
-      wantMrWhite = optMrWhite;
+    } else if (optMrWhite && n < 5) {
+      return { success: false, message: 'Mr. White requires at least 5 players' };
+    } else if (optUnder > 3) {
+      return { success: false, message: 'Max 3 Undercover' };
     } else {
-      const optUnder = options.undercoverCount ?? 1;
-      const optMrWhite = options.mrWhite ?? false;
       const nonCivilianCount = optUnder + (optMrWhite ? 1 : 0);
-      if (optMrWhite && n < 5) {
-        return { success: false, message: 'Mr. White requires at least 5 players' };
-      }
-      if (optUnder > 3) {
-        return { success: false, message: 'Max 3 Undercover' };
-      }
-      const maxNonCivilian = Math.floor((n - 1) / 2); // civil > nonCivilian
-      if (nonCivilianCount > maxNonCivilian) {
-        const maxU = Math.min(3, Math.max(1, maxNonCivilian - (optMrWhite ? 1 : 0)));
+      const civilCount = n - nonCivilianCount;
+      if (civilCount <= nonCivilianCount) {
+        const maxNonCivil = Math.floor((n - 1) / 2);
+        const maxU = Math.min(3, maxNonCivil - (optMrWhite ? 1 : 0));
         return {
           success: false,
           message: `Civil must outnumber others — max ${maxU} Undercover${optMrWhite ? ' (with Mr. White)' : ''}`,
@@ -231,11 +215,10 @@ class UndercoverGame {
     const alive = this.getAlivePlayers();
     const undercoverAlive = alive.filter(p => p.role === ROLES.UNDERCOVER);
     const civiliansAlive = alive.filter(p => p.role === ROLES.CIVILIAN);
-    // Mr. White เป็นฝ่ายแยก — ชนะเมื่อถูกโหวตออกและทายคำถูก
 
     return {
       civiliansWin: undercoverAlive.length === 0,
-      undercoverWin: undercoverAlive.length > civiliansAlive.length,
+      undercoverWin: undercoverAlive.length >= civiliansAlive.length && undercoverAlive.length > 0,
       eliminated: null,
     };
   }
@@ -276,12 +259,12 @@ class UndercoverGame {
   resetToWaiting() {
     this.phase = 'waiting';
     this.wordPair = null;
+    delete this.pendingMrWhiteGuess;
     this.descriptions.clear();
     this.votes.clear();
     this.currentRound = 0;
     this.describeOrder = null;
     this.displayNames = new Map();
-    delete this.pendingMrWhiteGuess;
     [...this.players.values()].forEach(p => {
       p.role = null;
       p.word = null;

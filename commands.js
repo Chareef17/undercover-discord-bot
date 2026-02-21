@@ -14,21 +14,7 @@ module.exports = [
       sc.setName('leave').setDescription('Leave the room (before game starts)')
     )
     .addSubcommand(sc =>
-      sc
-        .setName('start')
-        .setDescription('Start the game')
-        .addIntegerOption(opt =>
-          opt
-            .setName('undercover')
-            .setDescription('Number of Undercover (1-3, default: 1)')
-            .setMinValue(1)
-            .setMaxValue(3)
-        )
-        .addBooleanOption(opt =>
-          opt
-            .setName('mr_white')
-            .setDescription('Include Mr. White? (needs 5+ players)')
-        )
+      sc.setName('start').setDescription('Start the game (options shown based on player count)')
     )
     .addSubcommand(sc =>
       sc.setName('word').setDescription('View your word again (sent via DM)')
