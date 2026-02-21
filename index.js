@@ -3,7 +3,12 @@ const {
   GatewayIntentBits,
   EmbedBuilder,
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   StringSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   REST,
   Routes,
 } = require('discord.js');
@@ -39,7 +44,7 @@ async function runCommand(interaction) {
 **Rules:**
 - Most players get the **same word** (Civilian)
 - 1 player gets a **similar word** (Undercover)
-- With 5+ players, there may be **Mr. White** with no word
+- With 5+ players, there may be **Mr. White** — no word, ฝ่ายแยก ถ้าถูกโหวตออกให้ทายคำ ถ้าถูก = ชนะ
 
 **Commands:** Type \`/uc\` and select
 \`\`\`
@@ -58,7 +63,7 @@ async function runCommand(interaction) {
 2. ใช้ \`/uc vote\` เมื่อทุกคนอธิบายแล้ว
 3. Vote for who you think is the Undercover
 4. Player with most votes is eliminated
-5. Civilians win by eliminating all Undercover
+5. Civilian ชนะเมื่อ Undercover หมด | Undercover ชนะเมื่อมากกว่า Civilian | Mr. White ชนะเมื่อถูกโหวตออกและทายคำถูก
 
 **/uc start — เลือกค่า:**
 - \`undercover\`: 1, 2 หรือ 3 (จำนวน Undercover)
@@ -293,6 +298,23 @@ client.on('interactionCreate', async (interaction) => {
     else roleText = '🟢 **Civilian**';
     embed.addFields({ name: 'Role', value: roleText, inline: false });
 
+    if (eliminated.role === ROLES.MR_WHITE) {
+      game.pendingMrWhiteGuess = eliminatedId;
+      embed.addFields({
+        name: '🃏 โอกาสทายคำ',
+        value: `${eliminated.username} — กดปุ่มด้านล่างเพื่อทายคำของ Civilian\nถ้าทายถูก = **Mr. White ชนะ!**`,
+        inline: false,
+      });
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`mrwhite_guess_${interaction.channel.id}`)
+          .setLabel('ทายคำ')
+          .setStyle(ButtonStyle.Primary)
+      );
+      await interaction.channel.send({ embeds: [embed], components: [row] });
+      return;
+    }
+
     const check = game.checkGameEnd();
 
     if (check.civiliansWin) {
@@ -321,6 +343,82 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     await interaction.channel.send({ embeds: [embed] });
+  }
+
+  if (interaction.isButton() && interaction.customId.startsWith('mrwhite_guess_')) {
+    const channelId = interaction.customId.replace('mrwhite_guess_', '');
+    const game = getGame(channelId);
+    if (!game || !game.pendingMrWhiteGuess) {
+      return interaction.reply({ content: '⚠️ ไม่สามารถทำได้', ephemeral: true });
+    }
+    if (interaction.user.id !== game.pendingMrWhiteGuess) {
+      return interaction.reply({ content: '⚠️ เฉพาะ Mr. White ที่ถูกโหวตออกเท่านั้น', ephemeral: true });
+    }
+    const modal = new ModalBuilder()
+      .setCustomId(`mrwhite_modal_${channelId}`)
+      .setTitle('ทายคำของ Civilian');
+    const input = new TextInputBuilder()
+      .setCustomId('guess')
+      .setLabel('พิมพ์คำที่คิดว่าเป็นคำของ Civilian')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('คำ 1 คำ')
+      .setMaxLength(50)
+      .setRequired(true);
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return interaction.showModal(modal);
+  }
+
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('mrwhite_modal_')) {
+    const channelId = interaction.customId.replace('mrwhite_modal_', '');
+    const game = getGame(channelId);
+    if (!game || !game.pendingMrWhiteGuess) {
+      return interaction.reply({ content: '⚠️ หมดเวลาทายคำ', ephemeral: true });
+    }
+    const guess = interaction.fields.getTextInputValue('guess');
+    const eliminatedId = game.pendingMrWhiteGuess;
+    delete game.pendingMrWhiteGuess;
+
+    if (game.checkMrWhiteGuess(guess)) {
+      const embed = new EmbedBuilder()
+        .setColor(0x57F287)
+        .setTitle('🃏 Mr. White ชนะ!')
+        .setDescription(`ทายคำ **${game.wordPair[0]}** ถูกต้อง!`)
+        .addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
+      game.resetToWaiting();
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    const eliminatedName = game.players.get(eliminatedId)?.username || 'Mr. White';
+    const wrongEmbed = new EmbedBuilder()
+      .setColor(0xED4245)
+      .setTitle('❌ ทายผิด')
+      .setDescription(`คำตอบที่ทาย: **${guess}**\nคำที่ถูกต้อง: **${game.wordPair[0]}**`);
+
+    const check = game.checkGameEnd();
+    if (check.civiliansWin) {
+      wrongEmbed.addFields({ name: '🏆 Result', value: '**Civilians win!**', inline: false });
+      wrongEmbed.addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
+      game.resetToWaiting();
+    } else if (check.undercoverWin) {
+      wrongEmbed.addFields({ name: '🏆 Result', value: '**Undercover wins!**', inline: false });
+      wrongEmbed.addFields(
+        { name: 'Civilian word', value: game.wordPair[0], inline: true },
+        { name: 'Undercover word', value: game.wordPair[1], inline: true }
+      );
+      wrongEmbed.addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
+      game.resetToWaiting();
+    } else {
+      game.resetRound();
+      const orderList = game.getDescribeOrderWithNames();
+      const orderText = orderList.map(({ num, name }) => `${num}. ${name}`).join('\n');
+      const nextPlayer = game.getNextToDescribe();
+      const nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
+      wrongEmbed.addFields(
+        { name: 'ลำดับการพิมพ์ (รอบถัดไป)', value: orderText, inline: false },
+        { name: 'ถึงรอบ', value: `**${nextName}** ให้พิมพ์ใบ้`, inline: false }
+      );
+    }
+    return interaction.reply({ embeds: [wrongEmbed] });
   }
 });
 

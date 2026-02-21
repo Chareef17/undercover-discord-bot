@@ -235,17 +235,20 @@ class UndercoverGame {
   checkGameEnd() {
     const alive = this.getAlivePlayers();
     const undercoverAlive = alive.filter(p => p.role === ROLES.UNDERCOVER);
-    const mrWhiteAlive = alive.filter(p => p.role === ROLES.MR_WHITE);
-
-    // Undercover หรือ Mr. White ถูก vote ออก = Civilian ชนะ
-    // Undercover ชนะเมื่อ (Undercover+Mr.White) มากกว่า Civilian เท่านั้น
     const civiliansAlive = alive.filter(p => p.role === ROLES.CIVILIAN);
+    // Mr. White เป็นฝ่ายแยก — ชนะเมื่อถูกโหวตออกและทายคำถูก
 
     return {
-      civiliansWin: undercoverAlive.length === 0 && mrWhiteAlive.length === 0,
-      undercoverWin: undercoverAlive.length + mrWhiteAlive.length > civiliansAlive.length,
-      eliminated: null, // จะเซ็ตหลังจาก vote
+      civiliansWin: undercoverAlive.length === 0,
+      undercoverWin: undercoverAlive.length > civiliansAlive.length,
+      eliminated: null,
     };
+  }
+
+  checkMrWhiteGuess(guess) {
+    if (!this.wordPair) return false;
+    const civilianWord = this.wordPair[0];
+    return guess.trim().toLowerCase() === civilianWord.toLowerCase();
   }
 
   getPlayerInfo(userId) {
@@ -292,6 +295,7 @@ class UndercoverGame {
     this.currentRound = 0;
     this.describeOrder = null;
     this.displayNames = new Map();
+    delete this.pendingMrWhiteGuess;
     [...this.players.values()].forEach(p => {
       p.role = null;
       p.word = null;
