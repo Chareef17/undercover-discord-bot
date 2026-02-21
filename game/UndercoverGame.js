@@ -139,6 +139,23 @@ class UndercoverGame {
     this.descriptions.clear();
     this.votes.clear();
 
+    // ลำดับการพิมพ์ — Mr. White ห้ามเป็นคนแรก
+    const alive = this.getAlivePlayers();
+    const mrWhitePlayers = alive.filter(p => p.role === ROLES.MR_WHITE);
+    const nonMrWhite = alive.filter(p => p.role !== ROLES.MR_WHITE);
+    const shuffle = (arr) => {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    };
+    const firstPlayer = nonMrWhite[Math.floor(Math.random() * nonMrWhite.length)];
+    const rest = shuffle(alive.filter(p => p.id !== firstPlayer.id));
+    this.describeOrder = [firstPlayer, ...rest];
+    this.displayNames = new Map();
+
     return {
       success: true,
       civilianWord,
@@ -156,6 +173,19 @@ class UndercoverGame {
 
     this.descriptions.set(userId, description);
     return true;
+  }
+
+  getNextToDescribe() {
+    if (!this.describeOrder) return null;
+    return this.describeOrder.find(p => !this.descriptions.has(p.id)) || null;
+  }
+
+  getDescribeOrderWithNames() {
+    if (!this.describeOrder) return [];
+    return this.describeOrder.map((p, i) => ({
+      num: i + 1,
+      name: this.displayNames.get(p.id) || p.username,
+    }));
   }
 
   allDescribed() {
@@ -234,6 +264,20 @@ class UndercoverGame {
     this.currentRound++;
     this.phase = 'describing';
     [...this.players.values()].forEach(p => { p.voted = false; });
+    const alive = this.getAlivePlayers();
+    const mrWhitePlayers = alive.filter(p => p.role === ROLES.MR_WHITE);
+    const nonMrWhite = alive.filter(p => p.role !== ROLES.MR_WHITE);
+    const shuffle = (arr) => {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    };
+    const firstPlayer = nonMrWhite[Math.floor(Math.random() * nonMrWhite.length)];
+    const rest = shuffle(alive.filter(p => p.id !== firstPlayer.id));
+    this.describeOrder = [firstPlayer, ...rest];
   }
 
   endGame() {
@@ -246,6 +290,8 @@ class UndercoverGame {
     this.descriptions.clear();
     this.votes.clear();
     this.currentRound = 0;
+    this.describeOrder = null;
+    this.displayNames = new Map();
     [...this.players.values()].forEach(p => {
       p.role = null;
       p.word = null;

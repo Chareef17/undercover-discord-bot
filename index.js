@@ -46,16 +46,16 @@ async function runCommand(interaction) {
 /uc create   - Create room (Host)
 /uc join     - Join game
 /uc leave    - Leave room
-/uc start    - Start game (Host) — เลือกจำนวน Undercover และ Mr. White ได้
+/uc start    - Start game — เลือกจำนวน Undercover และ Mr. White ได้
 /uc word     - View your word
-/uc vote     - Start voting (Host)
+/uc vote     - Start voting
 /uc end      - End game (Host)
 /uc help     - Show this help
 \`\`\`
 
 **How to play:**
 1. Everyone gives a **one-word hint** about their word (พิมพ์ในแชท)
-2. Host uses \`/uc vote\` when everyone has described
+2. ใช้ \`/uc vote\` เมื่อทุกคนอธิบายแล้ว
 3. Vote for who you think is the Undercover
 4. Player with most votes is eliminated
 5. Civilians win by eliminating all Undercover
@@ -79,9 +79,9 @@ async function runCommand(interaction) {
     const embed = new EmbedBuilder()
       .setColor(0x57F287)
       .setTitle('🎮 Game room created!')
-      .setDescription(`${user} is the Host\n\nUse \`/uc join\` to join`)
+      .setDescription(`${user} สร้างห้อง\n\nใช้ \`/uc join\` เพื่อเข้าร่วม`)
       .addFields({ name: 'Players', value: `1/${config.maxPlayers}`, inline: true })
-      .addFields({ name: 'Start game', value: '`/uc start` (Host)', inline: true })
+      .addFields({ name: 'Start game', value: '`/uc start`', inline: true })
       .setFooter({ text: `Need at least ${config.minPlayers} players` });
     return interaction.reply({ embeds: [embed] });
   }
@@ -115,7 +115,7 @@ async function runCommand(interaction) {
   if (sub === 'start') {
     const game = getGame(channelId);
     if (!game) return interaction.reply({ content: '⚠️ No game', ephemeral: true });
-    if (game.hostId !== user.id) return interaction.reply({ content: '⚠️ Host only', ephemeral: true });
+    if (!game.players.has(user.id)) return interaction.reply({ content: '⚠️ You must be in the game', ephemeral: true });
 
     const undercoverOpt = interaction.options.getInteger('undercover');
     const mrWhiteOpt = interaction.options.getBoolean('mr_white');
@@ -127,16 +127,35 @@ async function runCommand(interaction) {
 
     await interaction.deferReply();
 
+    const guild = interaction.guild;
+    if (guild) {
+      for (const [userId] of game.players) {
+        try {
+          const member = await guild.members.fetch(userId);
+          game.displayNames.set(userId, member.displayName || member.user.username);
+        } catch {
+          game.displayNames.set(userId, game.players.get(userId).username);
+        }
+      }
+    }
+
+    const orderList = game.getDescribeOrderWithNames();
+    const orderText = orderList.map(({ num, name }) => `${num}. ${name}`).join('\n');
+    const nextPlayer = game.getNextToDescribe();
+    const nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
+
     const embed = new EmbedBuilder()
       .setColor(0xFEE75C)
       .setTitle('🎭 Game started!')
-      .setDescription(`Everyone will receive their word via **DM**!\n\nพิมพ์คำอธิบาย **1 คำ** ในแชท (ตัวใหญ่ตัวเล็กไม่มีผล)`)
+      .setDescription(`ทุกคนจะได้คำทาง **DM**!\n\nพิมพ์คำอธิบาย **1 คำ** ในแชท (ตัวใหญ่ตัวเล็กไม่มีผล)`)
       .addFields(
         { name: 'Players', value: String(game.getPlayerCount()), inline: true },
         { name: 'Undercover', value: String(result.undercoverCount), inline: true },
-        { name: 'Mr. White', value: result.hasMrWhite ? 'Yes' : 'No', inline: true }
+        { name: 'Mr. White', value: result.hasMrWhite ? 'Yes' : 'No', inline: true },
+        { name: 'ลำดับการพิมพ์', value: orderText, inline: false },
+        { name: 'ถึงรอบ', value: `**${nextName}** ให้พิมพ์ใบ้`, inline: false }
       )
-      .setFooter({ text: 'Host uses /uc vote when everyone has described' });
+      .setFooter({ text: 'ใช้ /uc vote เมื่อทุกคนอธิบายแล้ว' });
 
     for (const [userId, player] of game.players) {
       try {
@@ -179,7 +198,7 @@ async function runCommand(interaction) {
   if (sub === 'vote') {
     const game = getGame(channelId);
     if (!game) return interaction.reply({ content: '⚠️ No game', ephemeral: true });
-    if (game.hostId !== user.id) return interaction.reply({ content: '⚠️ Host only', ephemeral: true });
+    if (!game.players.has(user.id)) return interaction.reply({ content: '⚠️ You must be in the game', ephemeral: true });
     if (game.phase !== 'describing') return interaction.reply({ content: '⚠️ Not voting phase yet', ephemeral: true });
 
     game.startVoting();
@@ -289,8 +308,16 @@ client.on('interactionCreate', async (interaction) => {
       embed.addFields({ name: '🔁 Next game', value: 'Use `/uc start` to play again', inline: false });
       game.resetToWaiting();
     } else {
-      embed.setFooter({ text: 'Next round — give your one-word hint' });
       game.resetRound();
+      const orderList = game.getDescribeOrderWithNames();
+      const orderText = orderList.map(({ num, name }) => `${num}. ${name}`).join('\n');
+      const nextPlayer = game.getNextToDescribe();
+      const nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
+      embed.addFields(
+        { name: 'ลำดับการพิมพ์ (รอบถัดไป)', value: orderText, inline: false },
+        { name: 'ถึงรอบ', value: `**${nextName}** ให้พิมพ์ใบ้`, inline: false }
+      );
+      embed.setFooter({ text: 'Next round — give your one-word hint' });
     }
 
     await interaction.channel.send({ embeds: [embed] });
@@ -317,9 +344,20 @@ client.on('messageCreate', async (message) => {
   const total = game.getAlivePlayers().length;
 
   if (count >= total) {
-    await message.reply(`✅ Everyone has described! Host use \`/uc vote\``);
+    await message.reply(`✅ ทุกคนอธิบายแล้ว! ใช้ \`/uc vote\` เพื่อโหวต`);
   } else {
-    await message.reply(`📝 Recorded (${count}/${total})`);
+    const nextPlayer = game.getNextToDescribe();
+    let nextName = nextPlayer ? (game.displayNames.get(nextPlayer.id) || nextPlayer.username) : '-';
+    if (nextPlayer && message.guild && !game.displayNames.has(nextPlayer.id)) {
+      try {
+        const member = await message.guild.members.fetch(nextPlayer.id);
+        nextName = member.displayName || nextPlayer.username;
+        game.displayNames.set(nextPlayer.id, nextName);
+      } catch {
+        nextName = nextPlayer.username;
+      }
+    }
+    await message.reply(`📝 บันทึกแล้ว (${count}/${total})\n\nถึงรอบ **${nextName}** ให้พิมพ์ใบ้`);
   }
 });
 

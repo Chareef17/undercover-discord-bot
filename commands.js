@@ -16,7 +16,7 @@ module.exports = [
     .addSubcommand(sc =>
       sc
         .setName('start')
-        .setDescription('Start the game (Host only)')
+        .setDescription('Start the game')
         .addIntegerOption(opt =>
           opt
             .setName('undercover')
@@ -34,7 +34,7 @@ module.exports = [
       sc.setName('word').setDescription('View your word again (sent via DM)')
     )
     .addSubcommand(sc =>
-      sc.setName('vote').setDescription('Start the voting phase (Host only)')
+      sc.setName('vote').setDescription('Start the voting phase')
     )
     .addSubcommand(sc =>
       sc.setName('end').setDescription('End the game (Host only)')
