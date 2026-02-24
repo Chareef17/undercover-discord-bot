@@ -1,5 +1,6 @@
 services:
-  bot:
+  discord-bot:
     build: .
-    env_file: .env
     restart: unless-stopped
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
