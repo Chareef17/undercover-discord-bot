@@ -31,6 +31,13 @@ function getGame(channelId) {
   return activeGames.get(channelId);
 }
 
+function playAgainRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('uc_join').setLabel('Join').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('uc_start').setLabel('Start').setStyle(ButtonStyle.Primary),
+  );
+}
+
 /** Returns valid start config choices. Civil > Under + White. */
 function getValidStartChoices(n) {
   if (n === 3 || n === 4) return [];
@@ -81,7 +88,7 @@ async function doStartGame(interaction, game, options) {
       { name: 'Order', value: orderText, inline: false },
       { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
     )
-    .setFooter({ text: 'Use /uc vote when everyone has described' });
+    .setFooter({ text: 'When everyone has described, press Vote' });
 
   for (const [userId, player] of game.players) {
     try {
@@ -94,7 +101,9 @@ async function doStartGame(interaction, game, options) {
   }
 
   const payload = { embeds: [embed], components: [] };
-  if (interaction.isStringSelectMenu() || interaction.isButton()) {
+  if (interaction.deferred || interaction.replied) {
+    await interaction.editReply(payload);
+  } else if (interaction.isStringSelectMenu() || interaction.isButton()) {
     await interaction.update(payload);
   } else {
     await interaction.editReply(payload);
@@ -172,11 +181,14 @@ async function runCommand(interaction) {
     const embed = new EmbedBuilder()
       .setColor(0x57F287)
       .setTitle('🎮 Game room created!')
-      .setDescription(`${user} created the room\n\nUse \`/uc join\` to join`)
+      .setDescription(`${user} created the room`)
       .addFields({ name: 'Players', value: `1/${config.maxPlayers}`, inline: true })
-      .addFields({ name: 'Start game', value: '`/uc start`', inline: true })
       .setFooter({ text: `Need at least ${config.minPlayers} players` });
-    return interaction.reply({ embeds: [embed] });
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('uc_join').setLabel('Join').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('uc_start').setLabel('Start').setStyle(ButtonStyle.Primary),
+    );
+    return interaction.reply({ embeds: [embed], components: [row] });
   }
 
   if (sub === 'join') {
@@ -188,7 +200,11 @@ async function runCommand(interaction) {
     if (!added) return interaction.reply({ content: '⚠️ You are already in or the room is full', ephemeral: true });
 
     const count = game.getPlayerCount();
-    return interaction.reply(`✅ ${user} joined! (${count}/${config.maxPlayers})`);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('uc_join').setLabel('Join').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('uc_start').setLabel('Start').setStyle(ButtonStyle.Primary),
+    );
+    return interaction.reply({ content: `✅ ${user} joined! (${count}/${config.maxPlayers})`, components: [row] });
   }
 
   if (sub === 'leave') {
@@ -208,7 +224,7 @@ async function runCommand(interaction) {
   if (sub === 'start') {
     const game = getGame(channelId);
     if (!game) return interaction.reply({ content: '⚠️ No game', ephemeral: true });
-    if (!game.players.has(user.id)) return interaction.reply({ content: '⚠️ You must be in the game', ephemeral: true });
+    if (game.hostId !== user.id) return interaction.reply({ content: '⚠️ Host only', ephemeral: true });
 
     const n = game.getPlayerCount();
     const choices = getValidStartChoices(n);
@@ -259,7 +275,7 @@ async function runCommand(interaction) {
   if (sub === 'vote') {
     const game = getGame(channelId);
     if (!game) return interaction.reply({ content: '⚠️ No game', ephemeral: true });
-    if (!game.players.has(user.id)) return interaction.reply({ content: '⚠️ You must be in the game', ephemeral: true });
+    if (game.hostId !== user.id) return interaction.reply({ content: '⚠️ Host only', ephemeral: true });
     if (game.phase !== 'describing') return interaction.reply({ content: '⚠️ Not voting phase yet', ephemeral: true });
 
     await ensureDisplayNames(game, interaction.guild);
@@ -314,13 +330,94 @@ client.on('interactionCreate', async (interaction) => {
     return runCommand(interaction);
   }
 
+  if (interaction.isButton() && interaction.customId === 'uc_join') {
+    const game = getGame(interaction.channel.id);
+    if (!game) return interaction.reply({ content: '⚠️ No game here. Use `/uc create` first', ephemeral: true });
+    if (game.phase !== 'waiting') return interaction.reply({ content: '⚠️ Game has already started', ephemeral: true });
+
+    const user = interaction.user;
+    const added = game.addPlayer(user.id, user.username);
+    if (!added) return interaction.reply({ content: '⚠️ You are already in or the room is full', ephemeral: true });
+
+    const count = game.getPlayerCount();
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('uc_join').setLabel('Join').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('uc_start').setLabel('Start').setStyle(ButtonStyle.Primary),
+    );
+    return interaction.reply({ content: `✅ ${user} joined! (${count}/${config.maxPlayers})`, components: [row] });
+  }
+
+  if (interaction.isButton() && interaction.customId === 'uc_start') {
+    const game = getGame(interaction.channel.id);
+    if (!game) return interaction.reply({ content: '⚠️ No game', ephemeral: true });
+    if (game.phase !== 'waiting') return interaction.reply({ content: '⚠️ Game has already started', ephemeral: true });
+    if (game.hostId !== interaction.user.id) return interaction.reply({ content: '⚠️ Host only', ephemeral: true });
+
+    const n = game.getPlayerCount();
+    const choices = getValidStartChoices(n);
+
+    await interaction.deferReply();
+
+    if (choices.length === 0) {
+      await doStartGame(interaction, game, { undercoverCount: 1, mrWhite: false });
+      return;
+    }
+
+    const options = choices.map((c) => ({
+      label: c.label,
+      value: `${c.undercoverCount}-${c.mrWhite ? '1' : '0'}`,
+    }));
+
+    const row = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('uc_start_config')
+        .setPlaceholder('เลือกการตั้งค่าเกม')
+        .addOptions(options)
+    );
+
+    await interaction.editReply({
+      content: `**${n} คน** — เลือกการตั้งค่า:`,
+      components: [row],
+    });
+    return;
+  }
+
+  if (interaction.isButton() && interaction.customId === 'uc_vote') {
+    const game = getGame(interaction.channel.id);
+    if (!game) return interaction.reply({ content: '⚠️ No game', ephemeral: true });
+    if (game.hostId !== interaction.user.id) return interaction.reply({ content: '⚠️ Host only', ephemeral: true });
+    if (game.phase !== 'describing') return interaction.reply({ content: '⚠️ Not voting phase yet', ephemeral: true });
+
+    await ensureDisplayNames(game, interaction.guild);
+    game.startVoting();
+    const alive = game.getAlivePlayers();
+    const voteOptions = alive.slice(0, 25).map(p => {
+      const name = getDisplayName(game, p.id);
+      return { label: name, value: p.id, description: `Vote for ${name}` };
+    });
+
+    const row = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('undercover_vote')
+        .setPlaceholder('Select who you think is the Undercover')
+        .addOptions(voteOptions)
+    );
+
+    const embed = new EmbedBuilder()
+      .setColor(0xED4245)
+      .setTitle('🗳️ Voting time!')
+      .setDescription('Select who you think is the Undercover');
+
+    return interaction.reply({ embeds: [embed], components: [row] });
+  }
+
   if (interaction.isStringSelectMenu() && interaction.customId === 'uc_start_config') {
     const game = getGame(interaction.channel.id);
     if (!game || game.phase !== 'waiting') {
       return interaction.reply({ content: '⚠️ Cannot start now', ephemeral: true });
     }
-    if (!game.players.has(interaction.user.id)) {
-      return interaction.reply({ content: '⚠️ You must be in the game', ephemeral: true });
+    if (game.hostId !== interaction.user.id) {
+      return interaction.reply({ content: '⚠️ Host only', ephemeral: true });
     }
     const [u, w] = interaction.values[0].split('-').map(Number);
     await doStartGame(interaction, game, { undercoverCount: u, mrWhite: w === 1 });
@@ -340,7 +437,8 @@ client.on('interactionCreate', async (interaction) => {
       return interaction.reply({ content: '⚠️ Cannot vote', ephemeral: true });
     }
 
-    await interaction.reply({ content: '✅ Vote recorded', ephemeral: true });
+    await interaction.deferReply({ ephemeral: true });
+    await interaction.editReply({ content: '✅ Vote recorded' });
 
     if (!game.allVoted()) return;
 
@@ -374,7 +472,7 @@ client.on('interactionCreate', async (interaction) => {
           { name: 'Order', value: orderText, inline: false },
           { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
         )
-        .setFooter({ text: 'Use /uc vote when everyone has described' });
+        .setFooter({ text: 'When everyone has described, press Vote' });
       await interaction.channel.send({ embeds: [tieEmbed, nextEmbed] });
       return;
     }
@@ -420,17 +518,19 @@ client.on('interactionCreate', async (interaction) => {
         .setColor(0x57F287)
         .setTitle('🏆 Civilians win!')
         .setDescription(`Civilian: **${game.wordPair[0]}** · Undercover: **${game.wordPair[1]}**`)
-        .setFooter({ text: 'Use /uc start to play again' });
+        .addFields({ name: 'ผลของคุณ', value: '🟢 Civil: คุณชนะ\n🔴 Undercover: คุณแพ้\n🃏 Mr. White: คุณแพ้', inline: false })
+        .setFooter({ text: 'Press Start to play again' });
       game.resetToWaiting();
-      await interaction.channel.send({ embeds: [voteEmbed, resultEmbed] });
+      await interaction.channel.send({ embeds: [voteEmbed, resultEmbed], components: [playAgainRow()] });
     } else if (check.undercoverWin) {
       const resultEmbed = new EmbedBuilder()
         .setColor(0xED4245)
         .setTitle('🏆 Undercover wins!')
         .setDescription(`Civilian: **${game.wordPair[0]}** · Undercover: **${game.wordPair[1]}**`)
-        .setFooter({ text: 'Use /uc start to play again' });
+        .addFields({ name: 'ผลของคุณ', value: '🟢 Civil: คุณแพ้\n🔴 Undercover: คุณชนะ\n🃏 Mr. White: คุณแพ้', inline: false })
+        .setFooter({ text: 'Press Start to play again' });
       game.resetToWaiting();
-      await interaction.channel.send({ embeds: [voteEmbed, resultEmbed] });
+      await interaction.channel.send({ embeds: [voteEmbed, resultEmbed], components: [playAgainRow()] });
     } else {
       game.resetRound();
       const orderList = game.getDescribeOrderWithNames();
@@ -444,7 +544,7 @@ client.on('interactionCreate', async (interaction) => {
           { name: 'Order', value: orderText, inline: false },
           { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
         )
-        .setFooter({ text: 'Use /uc vote when everyone has described' });
+        .setFooter({ text: 'When everyone has described, press Vote' });
       await interaction.channel.send({ embeds: [voteEmbed, nextEmbed] });
     }
   }
@@ -488,9 +588,10 @@ client.on('interactionCreate', async (interaction) => {
         .setColor(0x9B59B6)
         .setTitle('🏆 Mr. White wins!')
         .setDescription(`Correctly guessed **${game.wordPair[0]}**!\n\nCivilian: **${game.wordPair[0]}** · Undercover: **${game.wordPair[1]}**`)
-        .setFooter({ text: 'Use /uc start to play again' });
+        .addFields({ name: 'ผลของคุณ', value: '🟢 Civil: คุณแพ้\n🔴 Undercover: คุณแพ้\n🃏 Mr. White: คุณชนะ', inline: false })
+        .setFooter({ text: 'Press Start to play again' });
       game.resetToWaiting();
-      return interaction.reply({ embeds: [resultEmbed] });
+      return interaction.reply({ embeds: [resultEmbed], components: [playAgainRow()] });
     }
 
     const wrongEmbed = new EmbedBuilder()
@@ -504,17 +605,19 @@ client.on('interactionCreate', async (interaction) => {
         .setColor(0x57F287)
         .setTitle('🏆 Civilians win!')
         .setDescription(`Civilian: **${game.wordPair[0]}** · Undercover: **${game.wordPair[1]}**`)
-        .setFooter({ text: 'Use /uc start to play again' });
+        .addFields({ name: 'ผลของคุณ', value: '🟢 Civil: คุณชนะ\n🔴 Undercover: คุณแพ้\n🃏 Mr. White: คุณแพ้', inline: false })
+        .setFooter({ text: 'Press Start to play again' });
       game.resetToWaiting();
-      return interaction.reply({ embeds: [wrongEmbed, resultEmbed] });
+      return interaction.reply({ embeds: [wrongEmbed, resultEmbed], components: [playAgainRow()] });
     } else if (check.undercoverWin) {
       const resultEmbed = new EmbedBuilder()
         .setColor(0xED4245)
         .setTitle('🏆 Undercover wins!')
         .setDescription(`Civilian: **${game.wordPair[0]}** · Undercover: **${game.wordPair[1]}**`)
-        .setFooter({ text: 'Use /uc start to play again' });
+        .addFields({ name: 'ผลของคุณ', value: '🟢 Civil: คุณแพ้\n🔴 Undercover: คุณชนะ\n🃏 Mr. White: คุณแพ้', inline: false })
+        .setFooter({ text: 'Press Start to play again' });
       game.resetToWaiting();
-      return interaction.reply({ embeds: [wrongEmbed, resultEmbed] });
+      return interaction.reply({ embeds: [wrongEmbed, resultEmbed], components: [playAgainRow()] });
     } else {
       game.resetRound();
       const orderList = game.getDescribeOrderWithNames();
@@ -528,7 +631,7 @@ client.on('interactionCreate', async (interaction) => {
           { name: 'Order', value: orderText, inline: false },
           { name: 'Your turn', value: `**${nextName}** — give your hint`, inline: false }
         )
-        .setFooter({ text: 'Use /uc vote when everyone has described' });
+        .setFooter({ text: 'When everyone has described, press Vote' });
       return interaction.reply({ embeds: [wrongEmbed, nextEmbed] });
     }
   }
@@ -554,7 +657,10 @@ client.on('messageCreate', async (message) => {
   const total = game.getAlivePlayers().length;
 
   if (count >= total) {
-    await message.reply(`✅ Everyone has described! Use \`/uc vote\` to vote`);
+    const voteRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('uc_vote').setLabel('Vote').setStyle(ButtonStyle.Danger),
+    );
+    await message.reply({ content: `✅ Everyone has described!`, components: [voteRow] });
   } else {
     await ensureDisplayNames(game, message.guild);
     const nextPlayer = game.getNextToDescribe();
